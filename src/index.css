@@ -1,0 +1,241 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer components {
+  .input-dark {
+    @apply bg-[#121b2e] border border-line rounded-xl px-3 py-2 text-sm text-white/90 placeholder-white/30 outline-none transition;
+  }
+  .input-dark:focus {
+    @apply border-brand;
+    box-shadow: 0 0 0 3px rgba(56, 132, 255, 0.2);
+  }
+  /* 日期选择器图标在深色背景下可见 */
+  .input-dark::-webkit-calendar-picker-indicator {
+    filter: invert(0.8);
+    cursor: pointer;
+  }
+  select.input-dark option {
+    background: #121b2e;
+    color: #fff;
+  }
+
+  /* 液态玻璃：霜面板（极致版，适配深色主题） */
+  .glass {
+    position: relative;
+    isolation: isolate;
+    overflow: hidden;
+    background: linear-gradient(135deg, rgba(190, 212, 255, 0.16), rgba(130, 165, 230, 0.05) 60%);
+    backdrop-filter: blur(26px) saturate(190%) brightness(1.14);
+    -webkit-backdrop-filter: blur(26px) saturate(190%) brightness(1.14);
+    border: 1px solid rgba(255, 255, 255, 0.20);
+    box-shadow:
+      0 16px 48px rgba(0, 0, 0, 0.5),
+      0 2px 10px rgba(0, 0, 0, 0.35),
+      inset 2px 2px 3px rgba(255, 255, 255, 0.4),
+      inset -1.5px -1.5px 3px rgba(255, 255, 255, 0.1),
+      inset 0 0 0 1px rgba(255, 255, 255, 0.1);
+  }
+  /* 镜面高光斜切 + 边缘反光 */
+  .glass::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    background:
+      linear-gradient(135deg, rgba(255, 255, 255, 0.45) 0%, rgba(255, 255, 255, 0.08) 16%, transparent 34%),
+      radial-gradient(130% 90% at 8% -10%, rgba(255, 255, 255, 0.22), transparent 55%);
+    mix-blend-mode: screen;
+  }
+  /* 底部细微反光 */
+  .glass::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 40%;
+    z-index: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    background: linear-gradient(to top, rgba(120, 160, 230, 0.08), transparent);
+  }
+  /* 内容始终位于高光之上 */
+  .glass > * {
+    position: relative;
+    z-index: 1;
+  }
+
+  /* 液态玻璃：蓝色霜面主按钮（极致版） */
+  .glass-btn {
+    position: relative;
+    color: #fff;
+    background: linear-gradient(135deg, rgba(90, 155, 255, 0.34), rgba(56, 132, 255, 0.2));
+    backdrop-filter: blur(14px) saturate(180%) brightness(1.1);
+    -webkit-backdrop-filter: blur(14px) saturate(180%) brightness(1.1);
+    border: 1px solid rgba(150, 190, 255, 0.6);
+    box-shadow:
+      0 6px 20px rgba(0, 0, 0, 0.35),
+      0 0 28px rgba(56, 132, 255, 0.45),
+      inset 2px 2px 2px rgba(255, 255, 255, 0.55),
+      inset -1px -1px 2px rgba(255, 255, 255, 0.18);
+    transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 2.2);
+  }
+  .glass-btn:hover {
+    background: linear-gradient(135deg, rgba(110, 170, 255, 0.46), rgba(56, 132, 255, 0.3));
+    box-shadow:
+      0 8px 26px rgba(0, 0, 0, 0.4),
+      0 0 38px rgba(56, 132, 255, 0.6),
+      inset 2px 2px 2px rgba(255, 255, 255, 0.65),
+      inset -1px -1px 2px rgba(255, 255, 255, 0.22);
+  }
+}
+
+/* Spline 加载中的旋转 loader */
+.loader {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 3px solid rgba(56, 132, 255, 0.25);
+  border-top-color: #3884ff;
+  animation: loader-spin 0.8s linear infinite;
+}
+@keyframes loader-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+:root {
+  --blue-primary: rgba(56, 132, 255, 1);
+  --blue-glow: rgba(56, 132, 255, 0.22);
+  --blue-border: rgba(56, 132, 255, 0.8);
+  --silver: #aeb9cf;
+  --border-color: #26324a;
+  --background-dark: #0c1322;
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: #070b14;
+  color: #eef2f8;
+  font-family: 'Inter', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Thin scrollbar */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: #26324a;
+  border-radius: 8px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #34466a;
+}
+
+/* ---------- FloatingLines ---------- */
+.floating-lines-container {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  overflow: hidden;
+}
+
+/* ---------- MagicBento ---------- */
+.magic-bento-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  position: relative;
+  padding: 1.25em;
+  border-radius: 18px;
+  border: 1px solid var(--border-color);
+  background: var(--background-dark);
+  font-weight: 300;
+  overflow: hidden;
+  transition: all 0.3s ease;
+
+  --glow-color: 56, 132, 255;
+  --glow-x: 50%;
+  --glow-y: 50%;
+  --glow-intensity: 0;
+  --glow-radius: 200px;
+}
+
+.magic-bento-card--border-glow::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  padding: 6px;
+  background: radial-gradient(
+    var(--glow-radius) circle at var(--glow-x) var(--glow-y),
+    rgba(var(--glow-color), calc(var(--glow-intensity) * 0.8)) 0%,
+    rgba(var(--glow-color), calc(var(--glow-intensity) * 0.4)) 30%,
+    transparent 60%
+  );
+  border-radius: inherit;
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  mask-composite: exclude;
+  pointer-events: none;
+  opacity: 1;
+  transition: opacity 0.3s ease;
+  z-index: 1;
+}
+
+.magic-bento-card--border-glow:hover {
+  box-shadow:
+    0 4px 20px rgba(16, 32, 64, 0.5),
+    0 0 30px var(--blue-glow);
+}
+
+.particle-container {
+  position: relative;
+  overflow: hidden;
+}
+
+.particle::before {
+  content: '';
+  position: absolute;
+  top: -2px;
+  left: -2px;
+  right: -2px;
+  bottom: -2px;
+  background: rgba(56, 132, 255, 0.2);
+  border-radius: 50%;
+  z-index: -1;
+}
+
+/* 全局鼠标光影 */
+.global-spotlight {
+  mix-blend-mode: screen;
+  will-change: transform, opacity;
+  z-index: 30 !important;
+  pointer-events: none;
+}
+
+.bento-section {
+  position: relative;
+  user-select: none;
+}
