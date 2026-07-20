@@ -14,9 +14,19 @@ const LINES_LINE_COUNT = [4, 6, 8];
 const LINES_LINE_DISTANCE = [8, 6, 4];
 const LINES_GRADIENT = ['#1e3a8a', '#3884ff', '#cfe0ff'];
 
-// 左侧导航：「扫描任务」为父级分组（纯标签不可跳转），下设三个子页面
+// 左侧导航：「工作台」与「扫描任务」均为父级分组（纯标签不可跳转），下设子页面
 const navItems = [
-  { to: '/', label: '工作台', icon: GridIcon, match: p => p === '/' },
+  {
+    group: true,
+    label: '工作台',
+    icon: GridIcon,
+    // 工作台首页 + 新建任务都属于「工作台」分组
+    match: p => p === '/' || p === '/tasks/new',
+    children: [
+      { to: '/', label: '工作台首页', match: p => p === '/' },
+      { to: '/tasks/new', label: '新建任务', match: p => p === '/tasks/new' }
+    ]
+  },
   {
     group: true,
     label: '扫描任务',
@@ -29,14 +39,14 @@ const navItems = [
       { to: '/tasks/general', label: '通扫任务', match: p => p.startsWith('/tasks/general') }
     ]
   },
-  { to: '/tasks/new', label: '新建任务', icon: PlusIcon, match: p => p === '/tasks/new' },
+  { to: '/stats', label: '统计分析', icon: ChartIcon, match: p => p.startsWith('/stats') },
   { to: '/export', label: '数据导出', icon: DownloadIcon, match: p => p.startsWith('/export') }
 ];
 
 // 移动端横向导航：父级分组扁平展开为三个子项
 const mobileNavItems = navItems.flatMap(item => (item.group ? item.children : [item]));
 
-export default function Layout({ children }) {
+export default function Layout({ children, perfMode = false }) {
   const navigate = useNavigate();
   const isMobile = useMobileDetection();
   const { pathname } = useLocation();
@@ -45,11 +55,13 @@ export default function Layout({ children }) {
     <div className="relative min-h-screen w-full overflow-x-hidden">
       {/* 液态玻璃 SVG 滤镜（全局挂一次） */}
       <GlassFilter />
-      {/* 全局鼠标光影：跟随光标在整个网页移动 */}
+      {/* 全局鼠标光影：跟随光标在整个整个网页移动（性能模式仍保留，开销小） */}
       <CursorSpotlight glowColor="56, 132, 255" radius={380} disabled={isMobile} />
 
-      {/* 背景：桌面端渲染 FloatingLines 流动线条（蓝白银）；移动端降级为静态 CSS 渐变，省电省性能 */}
-      {isMobile ? (
+      {/* 背景：
+          - 性能模式：静态 CSS 渐变（不加载 three.js，省 GPU/CPU）
+          - 高质量模式：桌面端渲染 FloatingLines 流动线条（蓝白银）；移动端降级为静态 CSS 渐变 */}
+      {perfMode || isMobile ? (
         <div
           className="fixed inset-0 z-0 pointer-events-none"
           style={{
@@ -165,7 +177,7 @@ export default function Layout({ children }) {
             </div>
             <button
               onClick={() => navigate('/tasks/new')}
-              className="glass-btn shrink-0 inline-flex items-center gap-2 rounded-xl px-3.5 py-2 text-sm font-medium"
+              className="glass-btn shrink-0 inline-flex items-center gap-2 rounded-xl px-3.5 py-2 text-sm font-medium mr-28 md:mr-32"
             >
               <PlusIcon />
               <span className="hidden sm:inline">新建任务</span>
@@ -233,6 +245,18 @@ function DownloadIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
       <path d="M12 3v12M7 10l5 5 5-5M5 21h14" />
+    </svg>
+  );
+}
+function ChartIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 3v18h18" />
+      <path d="M7 14l3-3 3 2 4-5" />
+      <circle cx="7" cy="14" r="0.6" fill="currentColor" />
+      <circle cx="10" cy="11" r="0.6" fill="currentColor" />
+      <circle cx="13" cy="13" r="0.6" fill="currentColor" />
+      <circle cx="17" cy="8" r="0.6" fill="currentColor" />
     </svg>
   );
 }
