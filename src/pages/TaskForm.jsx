@@ -1,8 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { createTask, getTask, updateTask, loadTasks, genTaskNo } from '../lib/storage';
 import { STATUSES, TASK_TYPES } from '../lib/constants';
+import { searchLines, findLinesByName, normalizeLineName } from '../lib/lineDictionary';
+import { searchPilots } from '../lib/pilotDictionary';
 import BackButton from '../components/BackButton';
+import AutoComplete from '../components/AutoComplete';
 
 const empty = {
   taskNo: '',
@@ -44,6 +47,14 @@ export default function TaskForm() {
     if (errors[k]) setErrors(e => ({ ...e, [k]: undefined }));
   };
 
+  // 当前线路在字典中的可选区段（同一线路可能被多个保线站分段维护）
+  const lineOptions = form.lineName ? findLinesByName(form.lineName) : [];
+  const towerHint = lineOptions.length > 1
+    ? `该线路有 ${lineOptions.length} 个区段可选：${lineOptions.map(o => `${o.towerRange}（${o.station}）`).join('、')}`
+    : lineOptions.length === 1
+      ? `字典参考：${lineOptions[0].towerRange}（${lineOptions[0].towerCount} 塔，${lineOptions[0].station}）`
+      : '该线路未在汇总表中，请手动填写';
+
   const validate = () => {
     const e = {};
     if (!form.lineName.trim()) e.lineName = '请填写线路名称';
@@ -57,18 +68,21 @@ export default function TaskForm() {
   const submit = e => {
     e.preventDefault();
     if (!validate()) return;
+    // 提交前归一化线路名称为字典标准名称（去空格、# 号、大小写差异），统一字段
+    const formToSubmit = { ...form, lineName: normalizeLineName(form.lineName) };
     if (isEdit) {
-      updateTask(id, form);
+      updateTask(id, formToSubmit);
       navigate(`/tasks/${id}`);
     } else {
       // 创建后停留在表单方便连续录入：保留任务类型、线路、飞手、司机与开始时间共 6 项高复用字段；
       // 杆塔 / 区段每条任务不同必须清空，结束时间清空、当前状态重置为「待复扫」，避免误带到下一条
-      const t = createTask(form);
+      const t = createTask(formToSubmit);
       setCreated({ taskNo: t.taskNo, id: t.id });
+      // 保留归一化后的线路名称（连续录入时下一条也用标准名称）
       setForm(f => ({
         ...empty,
         taskType: f.taskType,
-        lineName: f.lineName,
+        lineName: formToSubmit.lineName,
         pilot: f.pilot,
         pilot2: f.pilot2,
         driver: f.driver,
@@ -115,22 +129,81 @@ export default function TaskForm() {
                 {TASK_TYPES.map(o => <option key={o} value={o}>{o}任务</option>)}
               </select>
             </Field>
-            <Field label="线路名称" required error={errors.lineName}>
-              <input className="input-dark w-full" value={form.lineName} onChange={e => set('lineName', e.target.value)} placeholder="如：500kV 云海一线" />
+            <Field label="线路名称" required error={errors.lineName} hint="输入 1 个字/字母即可弹出可选线路（来自《应急抢修中心运维线路汇总表》）">
+              <AutoComplete
+                value={form.lineName}
+                onChange={v => set('lineName', v)}
+                onSearch={useCallback(q => searchLines(q, 30), [])}
+                onSelect={item => {
+                  // 选中后自动带出杆塔 / 区段（用户可继续编辑）
+                  setForm(f => ({
+                    ...f,
+                    lineName: item.lineName,
+                    towerRange: item.towerRange
+                  }));
+                  if (errors.lineName) setErrors(e => ({ ...e, lineName: undefined }));
+                  if (errors.towerRange) setErrors(e => ({ ...e, towerRange: undefined }));
+                }}
+                getKey={item => `${item.station}-${item.lineName}-${item.towerRange}`}
+                placeholder="如：群兴、500kV、甲线"
+                renderItem={(item, isActive) => (
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <div className={`text-sm font-medium truncate ${isActive ? 'text-white' : 'text-white/85'}`}>
+                        {item.lineName}
+                      </div>
+                      <div className="text-[11px] text-white/45 truncate mt-0.5">
+                        {item.station} · 杆塔 {item.towerRange} · {item.towerCount} 塔 · {item.length} km
+                      </div>
+                    </div>
+                    {isActive && (
+                      <span className="text-[10px] text-brand shrink-0">回车选中</span>
+                    )}
+                  </div>
+                )}
+              />
             </Field>
-            <Field label="杆塔 / 区段" required error={errors.towerRange}>
-              <input className="input-dark w-full" value={form.towerRange} onChange={e => set('towerRange', e.target.value)} placeholder="如：123#-126#" />
+            <Field label="杆塔 / 区段" required error={errors.towerRange} hint={towerHint}>
+              <input className="input-dark w-full" value={form.towerRange} onChange={e => set('towerRange', e.target.value)} placeholder="如：123#-126#（选中线路后自动带出）" />
             </Field>
           </div>
         </Section>
 
         <Section title="人员与时间">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Field label="责任飞手">
-              <input className="input-dark w-full" value={form.pilot} onChange={e => set('pilot', e.target.value)} placeholder="可选，如：张三" />
+            <Field label="责任飞手" hint="输入姓名 1 个字即可弹出可选飞手（来自《无人机实名登记表》）">
+              <AutoComplete
+                value={form.pilot}
+                onChange={v => set('pilot', v)}
+                onSearch={useCallback(q => searchPilots(q, 20), [])}
+                onSelect={item => set('pilot', item)}
+                getKey={item => item}
+                placeholder="可选，如：张三"
+                minQuery={1}
+                renderItem={(item, isActive) => (
+                  <div className="flex items-center justify-between gap-2">
+                    <span className={`text-sm ${isActive ? 'text-white' : 'text-white/85'}`}>{item}</span>
+                    {isActive && <span className="text-[10px] text-brand">回车选中</span>}
+                  </div>
+                )}
+              />
             </Field>
-            <Field label="协助飞手">
-              <input className="input-dark w-full" value={form.pilot2} onChange={e => set('pilot2', e.target.value)} placeholder="可选，如：李明" />
+            <Field label="协助飞手" hint="输入姓名 1 个字即可弹出可选飞手">
+              <AutoComplete
+                value={form.pilot2}
+                onChange={v => set('pilot2', v)}
+                onSearch={useCallback(q => searchPilots(q, 20), [])}
+                onSelect={item => set('pilot2', item)}
+                getKey={item => item}
+                placeholder="可选，如：李明"
+                minQuery={1}
+                renderItem={(item, isActive) => (
+                  <div className="flex items-center justify-between gap-2">
+                    <span className={`text-sm ${isActive ? 'text-white' : 'text-white/85'}`}>{item}</span>
+                    {isActive && <span className="text-[10px] text-brand">回车选中</span>}
+                  </div>
+                )}
+              />
             </Field>
             <Field label="司机">
               <input className="input-dark w-full" value={form.driver} onChange={e => set('driver', e.target.value)} placeholder="可选，如：陈师傅" />
@@ -183,13 +256,14 @@ function Section({ title, children }) {
   );
 }
 
-function Field({ label, required, error, children }) {
+function Field({ label, required, error, hint, children }) {
   return (
     <div className="space-y-1.5">
       <label className="block text-xs text-white/55">
         {label} {required && <span className="text-red-400">*</span>}
       </label>
       {children}
+      {hint && <p className="text-[11px] text-white/40 leading-relaxed">{hint}</p>}
       {error && <p className="text-xs text-red-400">{error}</p>}
     </div>
   );

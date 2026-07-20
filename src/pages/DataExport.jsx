@@ -1,10 +1,20 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { loadTasks, resetSampleData, importTasks } from '../lib/storage';
-import { exportTasks, exportWeeklyTasks } from '../lib/exportExcel';
+import { exportTasks, exportPeriodTasks } from '../lib/exportExcel';
 import { importTasksFromExcel } from '../lib/importExcel';
-import { todayStr, STATUSES, isOverdue, getWeekInfo } from '../lib/constants';
+import {
+  todayStr, STATUSES, isOverdue,
+  getWeekInfo, getMonthInfo, getQuarterInfo, getYearInfo
+} from '../lib/constants';
 import GlowCard from '../components/GlowCard';
 import ConfirmModal from '../components/ConfirmModal';
+
+const PERIOD_TYPES = [
+  { key: 'week', label: '按周' },
+  { key: 'month', label: '按月' },
+  { key: 'quarter', label: '按季度' },
+  { key: 'year', label: '按年' }
+];
 
 export default function DataExport() {
   const [tasks, setTasks] = useState([]);
@@ -33,44 +43,80 @@ export default function DataExport() {
     };
   }, [tasks]);
 
-  // 本周信息（周一为一周起点，ISO 周序号）
-  const thisWeek = useMemo(() => getWeekInfo(todayStr()), []);
-  // 概览卡「本周开始」固定统计当前周
+  // 当前日期与对应 period
+  const today = todayStr();
+
+  // 当前周期信息（用于默认选中 + 显示"当前"标记）
+  const thisWeek = useMemo(() => getWeekInfo(today), [today]);
+  const thisMonth = useMemo(() => getMonthInfo(today), [today]);
+  const thisQuarter = useMemo(() => getQuarterInfo(today), [today]);
+  const thisYear = useMemo(() => getYearInfo(today), [today]);
+
+  // 当前选中的周期类型（'week' | 'month' | 'quarter' | 'year'）
+  const [periodType, setPeriodType] = useState('week');
+
+  // 各类型对应的 planDate 解析函数
+  const periodBuilders = {
+    week: getWeekInfo,
+    month: getMonthInfo,
+    quarter: getQuarterInfo,
+    year: getYearInfo
+  };
+
+  // 各类型的可选时段列表（去重 + 计数 + 最近的在前 + 保证包含当前）
+  const periodOptions = useMemo(() => {
+    const result = {};
+    const currentMap = { week: thisWeek, month: thisMonth, quarter: thisQuarter, year: thisYear };
+    for (const { key } of PERIOD_TYPES) {
+      const get = periodBuilders[key];
+      const current = currentMap[key];
+      const map = new Map();
+      for (const t of tasks) {
+        const info = get(t.planDate);
+        if (!info) continue;
+        if (!map.has(info.key)) map.set(info.key, { ...info, count: 0 });
+        map.get(info.key).count += 1;
+      }
+      const list = [...map.values()].sort((a, b) => (a.key < b.key ? 1 : -1));
+      if (current && !map.has(current.key)) list.unshift({ ...current, count: 0 });
+      result[key] = list;
+    }
+    return result;
+  }, [tasks, thisWeek, thisMonth, thisQuarter, thisYear]);
+
+  // 选中时段 key（默认每个 tab 选当前周期）
+  const [selectedKey, setSelectedKey] = useState({
+    week: thisWeek?.key || '',
+    month: thisMonth?.key || '',
+    quarter: thisQuarter?.key || '',
+    year: thisYear?.key || ''
+  });
+  // 切换 tab 后若选中项不存在，回退到当前周期
+  useEffect(() => {
+    const list = periodOptions[periodType] || [];
+    const currentMap = { week: thisWeek, month: thisMonth, quarter: thisQuarter, year: thisYear };
+    const current = currentMap[periodType];
+    if (list.length && current && !list.some(o => o.key === selectedKey[periodType])) {
+      setSelectedKey(s => ({ ...s, [periodType]: current.key }));
+    }
+  }, [periodOptions, periodType, selectedKey, thisWeek, thisMonth, thisQuarter, thisYear]);
+
+  const selectedPeriod = useMemo(() => {
+    const list = periodOptions[periodType] || [];
+    return list.find(o => o.key === selectedKey[periodType]) || null;
+  }, [periodOptions, periodType, selectedKey]);
+
+  // 当前 tab 下的任务（按 planDate 落在该周期内）
+  const periodTasks = useMemo(() => {
+    if (!selectedPeriod) return [];
+    const get = periodBuilders[periodType];
+    return tasks.filter(t => get(t.planDate)?.key === selectedPeriod.key);
+  }, [tasks, periodType, selectedPeriod]);
+
+  // 概览卡"本周开始"统计
   const thisWeekCount = useMemo(
     () => tasks.filter(t => thisWeek && getWeekInfo(t.planDate)?.key === thisWeek.key).length,
     [tasks, thisWeek]
-  );
-
-  // 可选周列表：数据中出现过的所有周（去重、最近的在前），并保证包含本周
-  const weekOptions = useMemo(() => {
-    const map = new Map();
-    for (const t of tasks) {
-      const info = getWeekInfo(t.planDate);
-      if (!info) continue;
-      if (!map.has(info.key)) map.set(info.key, { ...info, count: 0 });
-      map.get(info.key).count += 1;
-    }
-    const list = [...map.values()].sort((a, b) => (a.key < b.key ? 1 : -1));
-    if (thisWeek && !map.has(thisWeek.key)) list.unshift({ ...thisWeek, count: 0 });
-    return list;
-  }, [tasks, thisWeek]);
-
-  // 周报选中的周（默认本周）；数据变化后若选中周不存在则回退到本周
-  const [selectedWeekKey, setSelectedWeekKey] = useState(() => getWeekInfo(todayStr())?.key || '');
-  useEffect(() => {
-    if (thisWeek && weekOptions.length && !weekOptions.some(w => w.key === selectedWeekKey)) {
-      setSelectedWeekKey(thisWeek.key);
-    }
-  }, [weekOptions, selectedWeekKey, thisWeek]);
-
-  const selectedWeek = useMemo(
-    () => weekOptions.find(w => w.key === selectedWeekKey) || null,
-    [weekOptions, selectedWeekKey]
-  );
-  // 选中周的计划任务（planDate 落在该周）
-  const weekTasks = useMemo(
-    () => tasks.filter(t => selectedWeek && getWeekInfo(t.planDate)?.key === selectedWeek.key),
-    [tasks, selectedWeek]
   );
 
   const handleExport = async () => {
@@ -91,17 +137,21 @@ export default function DataExport() {
     }
   };
 
-  // 导出周报：选中周的计划任务走精简 8 列美化样式，适合直接发工作群
+  // 导出周报：选中周的计划任务走精简 9 列美化样式，适合直接发工作群
   const handleExportWeek = async () => {
     setNotice(null);
-    if (!selectedWeek || weekTasks.length === 0) return; // 按钮已置灰，这里双保险
+    if (!selectedPeriod || periodTasks.length === 0) return;
     setExportingWeek(true);
     try {
-      await exportWeeklyTasks(weekTasks, selectedWeek);
-      setNotice({ type: 'success', text: `已导出周报（W${selectedWeek.week} · ${selectedWeek.label}），共 ${weekTasks.length} 条计划任务。` });
+      await exportPeriodTasks(periodTasks, periodType, selectedPeriod);
+      const typeLabel = PERIOD_TYPES.find(p => p.key === periodType)?.label || '';
+      setNotice({
+        type: 'success',
+        text: `已导出${typeLabel}（${selectedPeriod.label}），共 ${periodTasks.length} 条计划任务。`
+      });
     } catch (e) {
-      console.error('导出周报失败', e);
-      setNotice({ type: 'error', text: '导出周报失败，请稍后重试。' });
+      console.error('导出失败', e);
+      setNotice({ type: 'error', text: '导出失败，请稍后重试。' });
     } finally {
       setExportingWeek(false);
     }
@@ -178,7 +228,7 @@ export default function DataExport() {
     <div className="max-w-3xl mx-auto space-y-6">
       <div>
         <h2 className="text-xl font-semibold text-white">数据导出</h2>
-        <p className="text-sm text-white/45 mt-1">按周导出周报发群汇报，或导出全部台账备份数据</p>
+        <p className="text-sm text-white/45 mt-1">按周/月/季度/年导出报发群汇报，或导出全部台账备份数据</p>
       </div>
 
       {/* 内联提示条 */}
@@ -192,37 +242,65 @@ export default function DataExport() {
         </div>
       )}
 
-      {/* 卡片一：导出周报（可选任意周，精简 8 列，适合直接发工作群） */}
+      {/* 卡片一：按周期导出（周/月/季度/年，精简 9 列，适合直接发工作群） */}
       <GlowCard glowColor="56, 132, 255" enableTilt={false} className="!p-6">
-        <div className="relative z-[2] flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div className="min-w-0">
-            <div className="text-white font-medium">导出周报</div>
-            <div className="text-sm text-white/50 mt-1">可选任意周 · 精简 8 列 · 含周序号与统计 · 适合直接发到工作群</div>
-            <div className="mt-2.5 flex items-center gap-2 flex-wrap">
-              <select
-                value={selectedWeekKey}
-                onChange={e => setSelectedWeekKey(e.target.value)}
-                className="input-dark text-sm"
-                aria-label="选择周"
-              >
-                {weekOptions.map(w => (
-                  <option key={w.key} value={w.key}>
-                    W{w.week} · {w.label}{w.key === thisWeek?.key ? '（本周）' : ''} · {w.count} 条
-                  </option>
-                ))}
-              </select>
+        <div className="relative z-[2] space-y-3">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div className="min-w-0">
+              <div className="text-white font-medium">按周期导出</div>
+              <div className="text-sm text-white/50 mt-1">
+                可选周/月/季度/年 · 精简 9 列 · 含周期标签与统计 · 适合直接发到工作群
+              </div>
             </div>
-            {selectedWeek && selectedWeek.count === 0 && (
-              <div className="text-xs text-white/40 mt-1.5">该周暂无计划任务</div>
-            )}
+            <button
+              onClick={handleExportWeek}
+              disabled={exportingWeek || periodTasks.length === 0}
+              className="glass-btn shrink-0 inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-medium disabled:opacity-50"
+            >
+              {exportingWeek ? '导出中…' : `↓ 导出${PERIOD_TYPES.find(p => p.key === periodType)?.label.replace('按', '') || ''}报`}
+            </button>
           </div>
-          <button
-            onClick={handleExportWeek}
-            disabled={exportingWeek || weekTasks.length === 0}
-            className="glass-btn shrink-0 inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-medium disabled:opacity-50"
-          >
-            {exportingWeek ? '导出中…' : '↓ 导出周报'}
-          </button>
+
+          {/* 周期类型 tab */}
+          <div className="flex items-center gap-1 rounded-xl border border-line/70 bg-[#0a1120]/80 p-1 w-fit">
+            {PERIOD_TYPES.map(p => (
+              <button
+                key={p.key}
+                onClick={() => setPeriodType(p.key)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${
+                  periodType === p.key
+                    ? 'bg-brand/25 text-white border border-brand/50 shadow-[0_0_14px_rgba(56,132,255,0.3)]'
+                    : 'text-white/55 hover:text-white border border-transparent'
+                }`}
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
+
+          {/* 时段下拉 */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <select
+              value={selectedKey[periodType] || ''}
+              onChange={e => setSelectedKey(s => ({ ...s, [periodType]: e.target.value }))}
+              className="input-dark text-sm"
+              aria-label="选择时段"
+            >
+              {(periodOptions[periodType] || []).map(o => {
+                const currentMap = { week: thisWeek, month: thisMonth, quarter: thisQuarter, year: thisYear };
+                const isCurrent = o.key === currentMap[periodType]?.key;
+                const prefix = periodType === 'week' ? `W${o.week} · ` : '';
+                return (
+                  <option key={o.key} value={o.key}>
+                    {prefix}{o.label}{isCurrent ? '（当前）' : ''} · {o.count} 条
+                  </option>
+                );
+              })}
+            </select>
+          </div>
+          {selectedPeriod && selectedPeriod.count === 0 && (
+            <div className="text-xs text-white/40">该时段暂无计划任务</div>
+          )}
         </div>
       </GlowCard>
 

@@ -6,7 +6,7 @@ import GlowCard, { useMobileDetection } from '../components/GlowCard';
 import StatusBadge from '../components/StatusBadge';
 import SplineHero from '../components/SplineHero';
 
-export default function Dashboard() {
+export default function Dashboard({ perfMode = false }) {
   const navigate = useNavigate();
   const [tasks, setTasks] = useState([]);
   const gridRef = useRef(null);
@@ -49,7 +49,7 @@ export default function Dashboard() {
 
   return (
     <div className="max-w-6xl mx-auto space-y-8">
-      <SplineHero />
+      <SplineHero perfMode={perfMode} />
 
       <div>
         <h2 className="text-xl font-semibold text-white">工作台</h2>
@@ -63,7 +63,7 @@ export default function Dashboard() {
             <GlowCard
               key={c.key}
               glowColor={c.color}
-              disableAnimations={isMobile}
+              disableAnimations={isMobile || perfMode}
               enableTilt={false}
               className="min-h-[120px] cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60"
               onClick={() => goCard(c.key)}
