@@ -2,4 +2,7 @@ node_modules/
 dist/
 .DS_Store
 .claude/
+.workbuddy/
 *.local
+vite.config.js.timestamp-*.mjs
+*.xlsx
