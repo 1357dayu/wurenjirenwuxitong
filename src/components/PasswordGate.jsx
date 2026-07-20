@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 
-const PASSWORD = 'wurenjizhinengxunjianzhongxin';
+const PASSWORD = 'wrj666666';
 const SESSION_KEY = 'drone_system_auth_v1';
 
 export function isUnlocked() {
@@ -364,7 +364,7 @@ export default function PasswordGate({ onUnlock }) {
           0%, 100% { transform: translateX(0); }
           15%, 75% { transform: translateX(-10px); }
           30%, 60% { transform: translateX(10px); }
-          45% { transform: translateX(-6px); }
+          45%, 55% { transform: translateX(-6px); }
         }
 
         /* 错误提示 */
