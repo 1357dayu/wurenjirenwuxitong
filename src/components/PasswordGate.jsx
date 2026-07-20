@@ -364,7 +364,7 @@ export default function PasswordGate({ onUnlock }) {
           0%, 100% { transform: translateX(0); }
           15%, 75% { transform: translateX(-10px); }
           30%, 60% { transform: translateX(10px); }
-          45%, 55% { transform: translateX(-6px); }
+          45% { transform: translateX(-6px); }
         }
 
         /* 错误提示 */
