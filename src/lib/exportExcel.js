@@ -145,15 +145,54 @@ export async function exportTasks(tasks) {
   await downloadWorkbook(workbook, `无人机扫描任务台账_${todayStr()}.xlsx`);
 }
 
-// ================= 本周周报导出（精简 9 列，发工作群用） =================
+// ================= 周期导出（周/月/季度/年，精简 9 列，发工作群用） =================
 
-// tasks 为调用方已筛好的本周任务数组；weekInfo 来自 getWeekInfo(todayStr())
-// weekInfo = { week: 29, label: '7月13日 ~ 7月19日', key: '2026-07-13' }
-export async function exportWeeklyTasks(tasks, weekInfo) {
+// 根据 periodType 生成大标题、副标题、sheet 名、文件名后缀
+// periodType: 'week' | 'month' | 'quarter' | 'year'
+function periodMeta(periodType, info) {
+  const infoLabel = info?.label || '';
+  if (periodType === 'week') {
+    return {
+      title: '无人机扫描任务周报',
+      sub: `W${info?.week || ''} · ${infoLabel} · 共`,
+      sheet: `W${info?.week || ''}周报`,
+      fileBase: `无人机扫描周报_W${info?.week || ''}_${(infoLabel || '').replace(/ /g, '')}`
+    };
+  }
+  if (periodType === 'month') {
+    return {
+      title: '无人机扫描任务月报',
+      sub: `${infoLabel} · 共`,
+      sheet: `${infoLabel}月报`,
+      fileBase: `无人机扫描月报_${infoLabel}`
+    };
+  }
+  if (periodType === 'quarter') {
+    return {
+      title: '无人机扫描任务季报',
+      sub: `${infoLabel} · 共`,
+      sheet: `${infoLabel}季报`,
+      fileBase: `无人机扫描季报_${infoLabel}`
+    };
+  }
+  // year
+  return {
+    title: '无人机扫描任务年报',
+    sub: `${infoLabel} · 共`,
+    sheet: `${infoLabel}年报`,
+    fileBase: `无人机扫描年报_${infoLabel}`
+  };
+}
+
+// 通用周期导出：tasks 为已筛好的周期内任务，periodType + periodInfo 决定标题/sheet/文件名
+// periodType: 'week' | 'month' | 'quarter' | 'year'
+// periodInfo: 对应 getWeekInfo/getMonthInfo/getQuarterInfo/getYearInfo 的返回
+export async function exportPeriodTasks(tasks, periodType, periodInfo) {
   const { default: ExcelJS } = await import('exceljs');
 
   const list = Array.isArray(tasks) ? tasks : [];
-  const info = weekInfo || { week: '', label: '', key: '' };
+  const info = periodInfo || { label: '' };
+  const meta = periodMeta(periodType, info);
 
   // 精简 9 列（不含任务类型/结束时间/闭环结论/扫描次数/备注/时间戳）
   const header = [
@@ -170,30 +209,30 @@ export async function exportWeeklyTasks(tasks, weekInfo) {
   const COLS = header.length; // 9
 
   const workbook = new ExcelJS.Workbook();
-  const ws = workbook.addWorksheet(`W${info.week}周报`);
+  const ws = workbook.addWorksheet(meta.sheet);
 
-  // 第 1 行：合并大标题「无人机扫描任务周报」（14pt 加粗深蓝居中）
+  // 第 1 行：合并大标题
   ws.mergeCells(1, 1, 1, COLS);
   const titleCell = ws.getCell('A1');
-  titleCell.value = '无人机扫描任务周报';
+  titleCell.value = meta.title;
   titleCell.font = { bold: true, size: 14, color: { argb: TITLE_BLUE } };
   titleCell.alignment = { horizontal: 'center', vertical: 'middle' };
   ws.getRow(1).height = 30;
 
-  // 第 2 行：合并副标题「W周序号 · 日期范围 · 共 N 条」（10pt 灰居中）
+  // 第 2 行：合并副标题
   ws.mergeCells(2, 1, 2, COLS);
   const subCell = ws.getCell('A2');
-  subCell.value = `W${info.week} · ${info.label} · 共 ${list.length} 条`;
+  subCell.value = `${meta.sub} ${list.length} 条`;
   subCell.font = { size: 10, color: { argb: GRAY } };
   subCell.alignment = { horizontal: 'center', vertical: 'middle' };
   ws.getRow(2).height = 18;
 
-  // 第 3 行：表头（样式与全部导出一致）
+  // 第 3 行：表头
   const headerRow = ws.getRow(3);
   header.forEach((h, i) => { headerRow.getCell(i + 1).value = h; });
   styleHeaderRow(headerRow, COLS);
 
-  // 第 4 行起：数据行（样式规则同全部导出；扫描结果列换行 + 顶端对齐）
+  // 第 4 行起：数据行
   list.forEach((t, idx) => {
     const row = ws.addRow([
       t.taskNo,
@@ -207,13 +246,12 @@ export async function exportWeeklyTasks(tasks, weekInfo) {
       t.rescanResult
     ]);
     styleDataRow(row, COLS, idx);
-    colorStatusCell(row.getCell(8), t.status); // 当前状态
-    if (isOverdue(t)) markOverduePlanDate(row.getCell(7)); // 开始时间
-    row.getCell(9).alignment = { wrapText: true, vertical: 'top' }; // 扫描结果
+    colorStatusCell(row.getCell(8), t.status);
+    if (isOverdue(t)) markOverduePlanDate(row.getCell(7));
+    row.getCell(9).alignment = { wrapText: true, vertical: 'top' };
   });
 
-  // 最后一行：合并统计行「待复扫 X · 已派发 X · … · 逾期 X」（9pt 灰居中）
-  // 空数组时此行紧跟表头（第 4 行），各计数全为 0
+  // 最后一行：合并统计行
   const counts = {};
   STATUSES.forEach(s => { counts[s] = 0; });
   let overdueCount = 0;
@@ -229,17 +267,17 @@ export async function exportWeeklyTasks(tasks, weekInfo) {
   statsCell.alignment = { horizontal: 'center', vertical: 'middle' };
   ws.getRow(statsRowNum).height = 16;
 
-  // 列宽：对齐全部导出同名列，司机列宽同飞手 10，扫描结果列放宽到 40 以配合自动换行
+  // 列宽
   const widths = [18, 16, 14, 10, 10, 10, 14, 12, 40];
   widths.forEach((w, i) => { ws.getColumn(i + 1).width = w; });
 
-  // 冻结前 3 行（标题 + 副标题 + 表头）
+  // 冻结前 3 行
   ws.views = [{ state: 'frozen', ySplit: 3 }];
 
-  // 文件名：周一/周日从 label 按 ' ~ ' 拆分（形如 7月13日）
-  const [mondayLabel = '', sundayLabel = ''] = String(info.label || '').split(' ~ ');
-  await downloadWorkbook(
-    workbook,
-    `无人机扫描周报_W${info.week}_${mondayLabel}~${sundayLabel}.xlsx`
-  );
+  await downloadWorkbook(workbook, `${meta.fileBase}.xlsx`);
+}
+
+// 兼容旧 API：周报仍可通过 exportWeeklyTasks 调用，内部走统一入口
+export async function exportWeeklyTasks(tasks, weekInfo) {
+  return exportPeriodTasks(tasks, 'week', weekInfo);
 }
